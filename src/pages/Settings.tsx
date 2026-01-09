@@ -1,8 +1,11 @@
 import { motion } from 'framer-motion';
-import { useState } from 'react';
-import { Bell, Moon, Clock, Volume2, Shield, Heart } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Bell, Moon, Volume2, Shield, Heart, Send } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { Switch } from '@/components/ui/switch';
+import { Button } from '@/components/ui/button';
+import { useNotificationService } from '@/hooks/useNotificationService';
+import { toast } from 'sonner';
 
 interface SettingItemProps {
   icon: React.ReactNode;
@@ -33,17 +36,69 @@ const SettingItem = ({ icon, title, description, checked, onCheckedChange, delay
   </motion.div>
 );
 
+const STORAGE_KEY = 'airfriend-settings';
+
 export const Settings = () => {
-  const [notifications, setNotifications] = useState(true);
-  const [quietHours, setQuietHours] = useState(true);
-  const [sounds, setSounds] = useState(false);
-  const [safeMode, setSafeMode] = useState(false);
+  const [notifications, setNotifications] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved).notifications ?? true : true;
+  });
+  const [quietHours, setQuietHours] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved).quietHours ?? true : true;
+  });
+  const [sounds, setSounds] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved).sounds ?? false : false;
+  });
+  const [safeMode, setSafeMode] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved).safeMode ?? false : false;
+  });
+
+  const { requestPermission, sendNotification } = useNotificationService({
+    enabled: notifications,
+    quietHours,
+    sounds,
+  });
+
+  // Persist settings
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      notifications,
+      quietHours,
+      sounds,
+      safeMode,
+    }));
+  }, [notifications, quietHours, sounds, safeMode]);
+
+  const handleNotificationsChange = async (checked: boolean) => {
+    if (checked) {
+      const granted = await requestPermission();
+      if (!granted) {
+        toast.error('Please allow notifications in your browser settings');
+        return;
+      }
+      toast.success('Ghost friends will now send you notifications! 👻');
+    }
+    setNotifications(checked);
+  };
+
+  const handleTestNotification = async () => {
+    const granted = await requestPermission();
+    if (granted) {
+      sendNotification();
+      toast.success('Test notification sent!');
+    } else {
+      toast.error('Please allow notifications first');
+    }
+  };
 
   return (
-    <div className="min-h-screen gradient-soft pb-28">
+    <div className="min-h-screen gradient-soft pb-12">
       <Header 
-        title="Settings" 
-        subtitle="Customize your experience" 
+        title="AirFriend" 
+        subtitle="에어친구 • Customize your experience" 
       />
       
       <div className="px-6 space-y-4">
@@ -61,7 +116,7 @@ export const Settings = () => {
           title="Push Notifications"
           description="Receive friend activity alerts"
           checked={notifications}
-          onCheckedChange={setNotifications}
+          onCheckedChange={handleNotificationsChange}
           delay={0.1}
         />
         
@@ -82,6 +137,21 @@ export const Settings = () => {
           onCheckedChange={setSounds}
           delay={0.3}
         />
+
+        {/* Test Notification */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+        >
+          <Button
+            onClick={handleTestNotification}
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-2xl py-6 shadow-card"
+          >
+            <Send size={18} className="mr-2" />
+            Send Test Notification
+          </Button>
+        </motion.div>
 
         {/* Privacy Section */}
         <motion.h3
